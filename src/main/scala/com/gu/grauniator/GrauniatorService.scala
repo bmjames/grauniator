@@ -1,7 +1,9 @@
 package com.gu.grauniator
 
-import akka.dispatch.Future
 
+import com.gu.grauniator.aws.SNS
+
+import akka.dispatch.Future
 import blueeyes.{BlueEyesServer, BlueEyesServiceBuilder}
 import blueeyes.bkka.AkkaTypeClasses._
 import blueeyes.core.data.{BijectionsChunkFutureJson, BijectionsChunkString, ByteChunk}
@@ -20,8 +22,14 @@ trait GrauniatorService extends BlueEyesServiceBuilder
     with BijectionsChunkFutureJson {
 
   val grauniator = service("grauniator", "1.0.0") { context =>
-
-    request {
+    startup {
+      val awsId = context.config[String]("awsId")
+      val awsKey = context.config[String]("awsKey")
+      val endpoint = context.config[String]("endpoint")
+      val topicArn = context.config[String]("topicArn")
+      Future(GrauniatorConfig(new SNS(awsId, awsKey, endpoint), topicArn))
+    } ->
+    request { case GrauniatorConfig(sns, topicArn) =>
 
       produce(text/plain) {
 
@@ -31,10 +39,15 @@ trait GrauniatorService extends BlueEyesServiceBuilder
 
               for {
                 notification <- request.content.sequence
+                message = extractMessage(notification)
+                words = ~(message map findMisspellings)
+                _ = println(words)
+                url = message flatMap extractUrl
+                alertMessage = (url |@| words.toNel)(formatMessage)
+                _ = println(alertMessage)
+                response <- alertMessage traverse (msg => sns.publish("Grauniator Alert", topicArn, msg))
               } yield {
-                val message = extractMessage(notification)
-                val words = ~(message map findMisspellings)
-                HttpResponse[ByteChunk](status = OK, content = words.toNel map formatWords)
+                HttpResponse[String](status = OK, content = alertMessage)
               }
 
             }
@@ -43,8 +56,8 @@ trait GrauniatorService extends BlueEyesServiceBuilder
 
       }
 
-    }
-
+    } ->
+    shutdown(_ => Future(()))
   }
 
   def extractMessage(notification: JValue): Option[JValue] =
@@ -53,16 +66,22 @@ trait GrauniatorService extends BlueEyesServiceBuilder
       json <- JsonParser.parseOpt(message)
     } yield json
 
+  def extractUrl(message: JValue): Option[String] =
+    (for {
+      JString(url) <- (message \\ "webUrl")
+    } yield url).headOption
+
   def findMisspellings(message: JValue): List[String] =
     for {
       JString(body) <- message \\ "body"
       word <- body.split("""\s+""").toList if commonMisspellings(word.toLowerCase)
     } yield word
 
-
-  def formatWords(words: NonEmptyList[String]): String =
-    words.toSet.mkString(", ") + "\n"
+  def formatMessage(url: String, words: NonEmptyList[String]): String =
+    words.toSet.mkString(", ") + " | " + url + "\n"
 
 }
 
 object Main extends BlueEyesServer with GrauniatorService
+
+case class GrauniatorConfig(sns: SNS, topicArn: String)
