@@ -2,8 +2,8 @@ package com.gu.grauniator
 package aws
 
 import akka.dispatch.Future
-import blueeyes.core.data.ByteChunk
-import blueeyes.core.http.{URI, HttpRequest, HttpResponse}
+import blueeyes.core.http.HttpResponse
+import blueeyes.core.http.MimeTypes.{application, `x-www-form-urlencoded`}
 import blueeyes.core.service.engines.HttpClientXLightWeb
 import scalaz._, Scalaz._
 
@@ -13,7 +13,6 @@ import org.joda.time.format.ISODateTimeFormat
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 import org.apache.commons.codec.binary.Base64
-import blueeyes.core.http.HttpMethods.GET
 
 
 /*
@@ -24,7 +23,11 @@ final class SNS(awsId: String, awsKey: String, endpoint: String) {
   import SNS._
   import blueeyes.core.data.BijectionsChunkString._
 
-  val client = new HttpClientXLightWeb().path("http://" + endpoint).translate[String]
+  val client =
+    new HttpClientXLightWeb()
+      .path("http://" + endpoint)
+      .contentType(application/`x-www-form-urlencoded`)
+      .translate[String]
 
   def publish(subject: String, topicArn: String, message: String): Future[HttpResponse[String]] = {
     val params = List(
@@ -37,16 +40,15 @@ final class SNS(awsId: String, awsKey: String, endpoint: String) {
       "SignatureVersion" -> "2",
       "SignatureMethod" -> algorithm
     )
-    val signature = signRequest(params)
+    val signature = signRequest("POST", "/", params)
     val signedParams = ("Signature" -> signature) :: params
-    val path = "/?" + canonicalQueryString(signedParams)
-    client.get[String](path)
+    client.post[String]("/")(canonicalQueryString(signedParams))
   }
 
-  private def signRequest(params: List[(String, String)]): String = {
+  private def signRequest(method: String, path: String, params: List[(String, String)]): String = {
     val hmac = Mac.getInstance(algorithm)
     hmac.init(secretKey)
-    val stringToSign = List("GET", endpoint, "/", canonicalQueryString(params)).mkString("\n")
+    val stringToSign = List(method, endpoint, path, canonicalQueryString(params)).mkString("\n")
     val bytes = hmac.doFinal(stringToSign.getBytes(charset))
     Base64.encodeBase64String(bytes)
   }
