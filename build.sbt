@@ -17,8 +17,8 @@ resolvers ++= Seq(
 )
 
 libraryDependencies ++= Seq(
-  "com.github.jdegoes" % "blueeyes-core_2.9.1" % "0.7.0-SNAPSHOT" % "compile",
-  "com.github.jdegoes" % "blueeyes-json_2.9.1" % "0.7.0-SNAPSHOT" % "compile",
+  "com.reportgrid" % "blueeyes-core_2.9.1" % "1.0.0-SNAPSHOT" % "compile",
+  "com.reportgrid" % "blueeyes-json_2.9.1" % "1.0.0-SNAPSHOT" % "compile",
   "ch.qos.logback" % "logback-classic" % "1.0.6"
 )
 
