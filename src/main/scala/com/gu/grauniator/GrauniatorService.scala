@@ -1,6 +1,5 @@
 package com.gu.grauniator
 
-
 import com.gu.grauniator.aws.SNS
 
 import akka.dispatch.Future
@@ -10,6 +9,7 @@ import blueeyes.core.data.{BijectionsChunkFutureJson, BijectionsChunkString, Byt
 import blueeyes.core.http.MimeTypes.{text, plain}
 import blueeyes.core.http.{HttpRequest, HttpResponse}
 import blueeyes.core.http.HttpStatusCodes.OK
+import blueeyes.core.service.ServiceContext
 import blueeyes.json.JsonAST._
 import blueeyes.json.JsonDSL._
 import blueeyes.json.JsonParser
@@ -23,11 +23,7 @@ trait GrauniatorService extends BlueEyesServiceBuilder
 
   val grauniator = service("grauniator", "1.0.0") { context =>
     startup {
-      val awsId = context.config[String]("awsId")
-      val awsKey = context.config[String]("awsKey")
-      val endpoint = context.config[String]("endpoint")
-      val topicArn = context.config[String]("topicArn")
-      Future(GrauniatorConfig(new SNS(awsId, awsKey, endpoint), topicArn))
+      Future(GrauniatorConfig(context))
     } ->
     request { case GrauniatorConfig(sns, topicArn) =>
 
@@ -71,9 +67,9 @@ trait GrauniatorService extends BlueEyesServiceBuilder
       JString(url) <- (message \\ "webUrl")
     } yield url).headOption
 
-  def findMisspellings(message: JValue): List[String] =
+  def findMisspellings(content: JValue): List[String] =
     for {
-      JString(body) <- message \\ "body"
+      JString(body) <- content \\ "body"
       word <- body.split("""\s+""").toList if commonMisspellings(word.toLowerCase)
     } yield word
 
@@ -85,3 +81,13 @@ trait GrauniatorService extends BlueEyesServiceBuilder
 object Main extends BlueEyesServer with GrauniatorService
 
 case class GrauniatorConfig(sns: SNS, topicArn: String)
+
+object GrauniatorConfig {
+  def apply(context: ServiceContext): GrauniatorConfig = {
+    val awsId = context.config[String]("awsId")
+    val awsKey = context.config[String]("awsKey")
+    val endpoint = context.config[String]("endpoint")
+    val topicArn = context.config[String]("topicArn")
+    GrauniatorConfig(new SNS(awsId, awsKey, endpoint), topicArn)
+  }
+}
