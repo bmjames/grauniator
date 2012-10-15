@@ -37,11 +37,9 @@ trait GrauniatorService extends BlueEyesServiceBuilder
                 notification <- request.content.sequence
                 message = extractMessage(notification)
                 words = ~(message map findMisspellings)
-                _ = println(words)
                 url = message flatMap extractUrl
                 alertMessage = (url |@| words.toNel)(formatMessage)
-                _ = println(alertMessage)
-                response <- alertMessage traverse (msg => sns.publish("Grauniator Alert", topicArn, msg))
+                _ <- alertMessage traverse (msg => sns.publish("Grauniator Alert", topicArn, msg))
               } yield {
                 HttpResponse[String](status = OK, content = alertMessage)
               }
