@@ -1,37 +1,35 @@
 package com.gu.grauniator
 package aws
 
-import akka.dispatch.Future
-import blueeyes.core.data.ByteChunk
-import blueeyes.core.http.HttpResponse
-import blueeyes.core.http.HttpHeaders.`Content-Type`
-import blueeyes.core.http.MimeTypes.{application, `x-www-form-urlencoded`}
-import blueeyes.core.service.engines.HttpClientXLightWeb
-import scalaz._, Scalaz._
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 
+import org.apache.commons.codec.binary.Base64
 import org.joda.time.{DateTimeZone, DateTime}
 import org.joda.time.format.ISODateTimeFormat
 
-import javax.crypto.Mac
-import javax.crypto.spec.SecretKeySpec
-import org.apache.commons.codec.binary.Base64
-import blueeyes.core.service.HttpClient
+import scalaz.Monad
 
 
 /*
  * Credit to https://gist.github.com/633175
  */
-final class SNS(awsId: String, awsKey: String, endpoint: String) {
-
+abstract class SNS(awsId: String, awsKey: String, endpoint: String) {
   import SNS._
-  import blueeyes.core.data.BijectionsChunkString._
 
-  val client: HttpClient[ByteChunk] =
-    new HttpClientXLightWeb()
-      .path("http://" + endpoint)
-      .header(`Content-Type`(application/`x-www-form-urlencoded`))
+  type F[_]
 
-  def publish(subject: String, topicArn: String, message: String): Future[HttpResponse[ByteChunk]] = {
+  def M: Monad[F]
+
+  type Result
+
+  def client: Client
+
+  trait Client {
+    def post(path: String)(content: String): F[Result]
+  }
+
+  def publish(subject: String, topicArn: String, message: String): F[Result] = {
     val params = List(
       "Subject" -> subject,
       "TopicArn" -> topicArn,
@@ -72,5 +70,5 @@ object SNS {
   val algorithm = "HmacSHA256"
 
   def urlEncode(s: String): String = java.net.URLEncoder.encode(s, charset).replaceAllLiterally("+", "%20")
-  
+
 }

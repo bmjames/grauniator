@@ -1,11 +1,11 @@
 package com.gu.grauniator
 
-import com.gu.grauniator.aws.SNS
+import com.gu.grauniator.aws.BlueeyesSNS
 
-import akka.dispatch.Future
+import akka.dispatch.{ExecutionContext, Future}
 import blueeyes.{BlueEyesServer, BlueEyesServiceBuilder}
 import blueeyes.bkka.AkkaTypeClasses._
-import blueeyes.core.data.{BijectionsChunkFutureJson, BijectionsChunkString, ByteChunk}
+import blueeyes.core.data.{BijectionsChunkFutureJson, BijectionsChunkString}
 import blueeyes.core.http.MimeTypes.{text, plain}
 import blueeyes.core.http.{HttpRequest, HttpResponse}
 import blueeyes.core.http.HttpStatusCodes.OK
@@ -33,6 +33,7 @@ trait GrauniatorService extends BlueEyesServiceBuilder
           path("/notify") {
             post { request: HttpRequest[Future[JValue]] =>
 
+              implicit val m = sns.M
               for {
                 notification <- request.content.sequence
                 message = extractMessage(notification)
@@ -78,14 +79,14 @@ trait GrauniatorService extends BlueEyesServiceBuilder
 
 object Main extends BlueEyesServer with GrauniatorService
 
-case class GrauniatorConfig(sns: SNS, topicArn: String)
+case class GrauniatorConfig(sns: BlueeyesSNS, topicArn: String)
 
 object GrauniatorConfig {
-  def apply(context: ServiceContext): GrauniatorConfig = {
+  def apply(context: ServiceContext)(implicit executor: ExecutionContext): GrauniatorConfig = {
     val awsId = context.config[String]("awsId")
     val awsKey = context.config[String]("awsKey")
     val endpoint = context.config[String]("endpoint")
     val topicArn = context.config[String]("topicArn")
-    GrauniatorConfig(new SNS(awsId, awsKey, endpoint), topicArn)
+    GrauniatorConfig(new BlueeyesSNS(awsId, awsKey, endpoint), topicArn)
   }
 }
